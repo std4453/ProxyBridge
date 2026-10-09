@@ -277,10 +277,17 @@ DWORD WINAPI packet_processor(LPVOID arg)
                 UINT16 sp = ntohs(tcp_header->SrcPort);
                 UINT16 dp = ntohs(tcp_header->DstPort);
 
+                // A new flow may reuse a port whose close was never observed.
+                // IPv4 and IPv6 share these bitmaps, so invalidate before the
+                // DIRECT fast path in both families (issue #206).
+                if (tcp_header->Syn && !tcp_header->Ack)
+                    port_clear(sp);
+
                 if (port_is_decided(sp))
                 {
+                    BOOL was_direct = port_is_direct(sp);
                     if (tcp_header->Fin || tcp_header->Rst) port_clear(sp);
-                    if (port_is_direct(sp))
+                    if (was_direct)
                     {
                         WinDivertSend(windivert_handle, packet, packet_len, NULL, &addr);
                         continue;
@@ -658,24 +665,29 @@ DWORD WINAPI packet_processor(LPVOID arg)
             // Once check_process_rule() has run for a source port and decided DIRECT,
             // every subsequent packet from that port takes this branch one bitmap
             // read 5 cycle + WinDivertSend, with zero kernel calls
-            // FIN/RST clears the cache entry so port can be reused safely
+            // Fresh SYN invalidates decisions even when FIN/RST was not observed.
             // Part of this taken from Cluade to fix windivert packet error
             {
                 UINT16 sp = ntohs(tcp_header->SrcPort);
 
                 // A fresh SYN starts a new connection that may be reusing an ephemeral
-                // port whose previous owner has closed. Evict any PID cached for this
-                // port so the rule decision is re-derived against the correct current
-                // process instead of a stale one (prevents wrong-app rule matching for
-                // up to PID_CACHE_TTL_MS after a port is recycled).
+                // port whose previous owner has closed. Evict both caches before
+                // consulting the DIRECT fast path; clearing only the PID leaves
+                // a stale DIRECT decision able to bypass rule evaluation (#206).
                 if (tcp_header->Syn && !tcp_header->Ack)
+                {
+                    port_clear(sp);
                     remove_cached_pid(ip_header->SrcAddr, sp, FALSE);
+                }
 
                 if (port_is_decided(sp))
                 {
+                    // Preserve this packet's verdict before retiring the cache.
+                    // Otherwise FIN/RST falls through and may cache DIRECT again.
+                    BOOL was_direct = port_is_direct(sp);
                     if (tcp_header->Fin || tcp_header->Rst)
                         port_clear(sp);
-                    if (port_is_direct(sp))
+                    if (was_direct)
                     {
                         WinDivertSend(windivert_handle, packet, packet_len, NULL, &addr);
                         continue;

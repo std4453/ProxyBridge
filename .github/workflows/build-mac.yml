@@ -15,6 +15,9 @@ jobs:
     permissions:
       contents: read
       actions: read
+    env:
+      # PRs and forks without a signing certificate still compile both targets.
+      SIGNED_BUILD: ${{ github.event_name != 'pull_request' && secrets.MACOS_CERTIFICATE != '' }}
 
     steps:
     - name: Checkout code
@@ -26,11 +29,32 @@ jobs:
         xcode-version: latest-stable
     
     - name: Create xcconfig files
+      if: env.SIGNED_BUILD == 'true'
       run: |
         echo "${{ secrets.MACOS_APP_XCCONFIG }}" > MacOS/ProxyBridge/Signing-Config-app.xcconfig
         echo "${{ secrets.MACOS_EXT_XCCONFIG }}" > MacOS/ProxyBridge/Signing-Config-ext.xcconfig
 
+    - name: Create unsigned xcconfig files
+      if: env.SIGNED_BUILD != 'true'
+      run: |
+        cat > MacOS/ProxyBridge/Signing-Config-app.xcconfig << 'EOF'
+        PRODUCT_MODULE_NAME = ProxyBridge
+        PRODUCT_NAME = ProxyBridge
+        PRODUCT_BUNDLE_IDENTIFIER = com.interceptsuite.ProxyBridge
+        ARCHS = arm64 x86_64
+        ONLY_ACTIVE_ARCH = NO
+        EOF
+        # Match the extension filename referenced by the app's embed phase.
+        cat > MacOS/ProxyBridge/Signing-Config-ext.xcconfig << 'EOF'
+        PRODUCT_MODULE_NAME = com_interceptsuite_ProxyBridge_extension
+        PRODUCT_NAME = com.interceptsuite.ProxyBridge.extension
+        PRODUCT_BUNDLE_IDENTIFIER = com.interceptsuite.ProxyBridge.extension
+        ARCHS = arm64 x86_64
+        ONLY_ACTIVE_ARCH = NO
+        EOF
+
     - name: Install Provisioning Profiles
+      if: env.SIGNED_BUILD == 'true'
       run: |
         mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
 
@@ -47,6 +71,7 @@ jobs:
         echo "Installed ext profile: ${EXT_UUID}"
 
     - name: Import Certificate
+      if: env.SIGNED_BUILD == 'true'
       run: |
         # Decode certificate
         echo "${{ secrets.MACOS_CERTIFICATE }}" | base64 --decode > /tmp/certificate.p12
@@ -85,6 +110,11 @@ jobs:
     - name: Build Universal Binary
       run: |
         cd MacOS/ProxyBridge
+        if [ "$SIGNED_BUILD" = "true" ]; then
+          SIGNING_ARGS=("OTHER_CODE_SIGN_FLAGS=--keychain build.keychain --timestamp")
+        else
+          SIGNING_ARGS=(CODE_SIGNING_ALLOWED=NO CODE_SIGN_IDENTITY= DEVELOPMENT_TEAM=)
+        fi
         xcodebuild \
           -project ProxyBridge.xcodeproj \
           -scheme ProxyBridge \
@@ -92,7 +122,7 @@ jobs:
           -derivedDataPath build/DerivedData \
           ARCHS="arm64 x86_64" \
           ONLY_ACTIVE_ARCH=NO \
-          OTHER_CODE_SIGN_FLAGS="--keychain build.keychain --timestamp" \
+          "${SIGNING_ARGS[@]}" \
           clean build
 
     - name: Verify Build
@@ -102,9 +132,12 @@ jobs:
         file build/DerivedData/Build/Products/Release/ProxyBridge.app/Contents/MacOS/ProxyBridge
         lipo -archs build/DerivedData/Build/Products/Release/ProxyBridge.app/Contents/MacOS/ProxyBridge
         # Verify code signature
-        codesign -dv --verbose=4 build/DerivedData/Build/Products/Release/ProxyBridge.app
+        if [ "$SIGNED_BUILD" = "true" ]; then
+          codesign -dv --verbose=4 build/DerivedData/Build/Products/Release/ProxyBridge.app
+        fi
 
     - name: Notarize App
+      if: env.SIGNED_BUILD == 'true'
       run: |
         APP_PATH="MacOS/ProxyBridge/build/DerivedData/Build/Products/Release/ProxyBridge.app"
 
@@ -146,6 +179,7 @@ jobs:
         spctl -a -vvv -t install "$APP_PATH"
 
     - name: Build PKG Installer
+      if: env.SIGNED_BUILD == 'true'
       env:
         PKG_ENV_CONTENT: ${{ secrets.PKG_ENV }}
       run: |
@@ -206,6 +240,7 @@ jobs:
         echo "PKG signed, notarized and stapled successfully"
 
     - name: Upload PKG Artifact
+      if: env.SIGNED_BUILD == 'true'
       uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
       with:
         name: ProxyBridge-macOS-Installer

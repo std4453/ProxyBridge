@@ -2,9 +2,9 @@ name: Build Windows
 
 on:
   push:
-    branches: [ main, dev ]
+    branches: [ main, dev, master ]
   pull_request:
-    branches: [ main, dev ]
+    branches: [ main, dev, master ]
   workflow_dispatch:
 
 permissions:
@@ -13,6 +13,7 @@ permissions:
 jobs:
   build:
     runs-on: windows-latest
+    timeout-minutes: 20
     permissions:
       contents: read
       actions: read
@@ -69,10 +70,15 @@ jobs:
     - name: Build project
       run: |
         cd Windows
-        .\compile.ps1 -NoSign
+        .\compile.ps1 -Compiler msvc -NoSign
+      shell: pwsh
+
+    - name: Run packet regression and DLL/CLI smoke tests
+      run: .\Windows\tests\run-msvc.ps1
       shell: pwsh
 
     - name: Upload artifacts
+      if: always()
       uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
       with:
         name: ProxyBridge-Build-${{ github.sha }}
