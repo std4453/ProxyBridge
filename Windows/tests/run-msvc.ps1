@@ -20,7 +20,7 @@ $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio/Installer
 $vsPath = & $vswhere -latest -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
 if (-not $vsPath) { throw 'MSVC x64 tools not found' }
 $vcvars = Join-Path $vsPath 'VC/Auxiliary/Build/vcvarsall.bat'
-$environment = & $env:ComSpec /d /s /c "`"`"$vcvars`" x64 >nul && set`""
+$environment = & $env:ComSpec /d /c "call `"$vcvars`" x64 >nul && set"
 if ($LASTEXITCODE -ne 0) { throw 'Could not initialize MSVC environment' }
 foreach ($line in $environment) {
     if ($line -match '^([^=]+)=(.*)$') {
