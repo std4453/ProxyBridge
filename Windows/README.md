@@ -419,19 +419,6 @@ The script automatically:
 - Builds `ProxyBridge.exe` (C GUI, MSVC, self-contained)
 - Copies all outputs to `Windows\output\`
 
-### Separate MinGW-w64 test build (GUI, CLI and DLL)
-
-With x64 `gcc` and `windres` on PATH and WinDivert extracted locally, run from
-the repository root:
-
-```powershell
-.\Windows\build-mingw.ps1 -WinDivertPath C:\path\WinDivert-2.2.2-A -RunTests
-```
-
-This produces an unsigned build in a new `Windows/output-mingw/` subdirectory,
-without an installer or changes to an installed copy. See
-[test instructions and limitations](tests/README.md) before switching traffic.
-
 ### Manual Build - DLL (MSVC)
 
 ```powershell

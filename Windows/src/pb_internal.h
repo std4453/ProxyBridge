@@ -212,31 +212,25 @@ extern char  *g_pidtbl_buf;
 extern DWORD  g_pidtbl_cap;
 
 // ---- per-source-port decision bitmaps: hot-path inline helpers ----
-// MinGW's __forceinline includes extern; it cannot follow static in C.
-#ifdef __GNUC__
-#define PB_FORCEINLINE static inline __attribute__((always_inline))
-#else
-#define PB_FORCEINLINE static __forceinline
-#endif
-PB_FORCEINLINE BOOL port_is_decided(UINT16 p)
+static __forceinline BOOL port_is_decided(UINT16 p)
 {
     return (port_decided_bitmap[p >> 5] >> (p & 31)) & 1;
 }
-PB_FORCEINLINE BOOL port_is_direct(UINT16 p)
+static __forceinline BOOL port_is_direct(UINT16 p)
 {
     return (port_direct_bitmap[p >> 5] >> (p & 31)) & 1;
 }
-PB_FORCEINLINE void port_set_direct(UINT16 p)
+static __forceinline void port_set_direct(UINT16 p)
 {
     InterlockedOr(&port_decided_bitmap[p >> 5], (LONG)(1u << (p & 31)));
     InterlockedOr(&port_direct_bitmap[p >> 5],  (LONG)(1u << (p & 31)));
 }
-PB_FORCEINLINE void port_set_decided(UINT16 p)  // decided, but NOT direct (proxy/block)
+static __forceinline void port_set_decided(UINT16 p)  // decided, but NOT direct (proxy/block)
 {
     InterlockedOr(&port_decided_bitmap[p >> 5], (LONG)(1u << (p & 31)));
     // leave port_direct_bitmap bit at 0
 }
-PB_FORCEINLINE void port_clear(UINT16 p)
+static __forceinline void port_clear(UINT16 p)
 {
     InterlockedAnd(&port_decided_bitmap[p >> 5], (LONG)~(1u << (p & 31)));
     InterlockedAnd(&port_direct_bitmap[p >> 5],  (LONG)~(1u << (p & 31)));
