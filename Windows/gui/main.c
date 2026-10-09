@@ -17,6 +17,10 @@
 #include <windowsx.h>
 #include <tlhelp32.h>
 #include <commctrl.h>
+// Older MinGW headers omit this SDK alias for the SysLink size message.
+#ifndef LM_GETIDEALSIZE
+#define LM_GETIDEALSIZE LM_GETIDEALHEIGHT
+#endif
 #include <commdlg.h>
 #include <dwmapi.h>
 #include <uxtheme.h>

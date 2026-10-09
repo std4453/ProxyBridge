@@ -1,4 +1,6 @@
 ## Windows
+.local-build/
+Windows/output-mingw/
 
 *.exe
 *.dll
